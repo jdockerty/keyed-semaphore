@@ -13,8 +13,11 @@ let permit_two = s.acquire("job_id_567").expect("known unique key");
 
 // do things
 
-let another_permit = s.acquire("job_id_123")?; // Would error! Attempting to acquire permit for a pre-existing key.
-drop(permit);
-let permit = s.acquire("job_id_123").expect("RAII guard dropped, this is okay") 
-// When permits goes out of scope, they are dropped and the key is released, freeing the key for use.
+// Would error! Attempting to acquire permit for a pre-existing key.
+let another_permit = s.acquire("job_id_123")?;
+
+drop(permit); // key=job_id_123
+
+let permit = s.acquire("job_id_123").expect("RAII guard dropped, this is okay");
+// When permits go out of scope, the key is released freeing it for later use.
 ```
