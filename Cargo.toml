@@ -2,6 +2,12 @@
 name = "keyed-semaphore"
 version = "0.1.0"
 edition = "2024"
+description = "Acquire many distinct RAII permits keyed by name, allowing only one in-flight permit per key."
+license = "MIT"
+repository = "https://github.com/jdockerty/keyed-semaphore"
+readme = "README.md"
+keywords = ["semaphore", "concurrency", "mutex", "permit", "keyed"]
+categories = ["concurrency"]
 
 [dependencies]
 parking_lot = "0.12.5"
