@@ -2,7 +2,7 @@
 
 Acquire many distinct permits based on a keyed name.
 
-This means that many RAII guards can be given out for _different_ keys, but only a single instance for the given key.
+This means that many RAII guards can be given out for _different_ keys, but only a single instance for the given key can be inflight at once.
 
 For example
 
