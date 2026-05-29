@@ -98,6 +98,8 @@ impl InflightSet {
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
+
     use crate::{InflightSet, InflightSetError};
 
     #[test]
@@ -121,14 +123,40 @@ mod test {
 
         let _guard = s.acquire("key_123").unwrap();
         assert_eq!(s.len(), 1);
-        assert!(matches!(
-            s.acquire("key_123").unwrap_err(),
-            InflightSetError::DuplicateKey(_)
-        ));
+        let e = s.acquire("key_123").unwrap_err();
+        assert!(matches!(e, InflightSetError::DuplicateKey(_)));
+        assert!(e.to_string().contains("key_123"));
         assert_eq!(
             s.len(),
             1,
             "Guard rejection should not increase stored keys"
         );
+    }
+
+    #[test]
+    fn same_key_after_drop() {
+        let s = InflightSet::new();
+        let name = "test-key";
+        let guard = s.acquire(name).expect("unique key, no errors");
+        drop(guard);
+        assert!(
+            s.acquire(name).is_ok(),
+            "Valid acquire of {name}, it has been released after drop"
+        );
+    }
+
+    #[test]
+    fn acquire_same_key_many_threads() {
+        let s = Arc::new(InflightSet::new());
+        for _ in 0..10_000 {
+            std::thread::spawn({
+                let s_captured = Arc::clone(&s);
+                move || {
+                    s_captured
+                        .acquire(&format!("my-key"))
+                        .expect("concurrent access should never cause a panic under Mutex usage");
+                }
+            });
+        }
     }
 }
