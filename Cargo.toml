@@ -1,6 +1,6 @@
 [package]
 name = "inflight-set"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Acquire many distinct RAII guards keyed by name, allowing only one in-flight guard per key."
 license = "MIT"
