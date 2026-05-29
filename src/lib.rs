@@ -85,6 +85,20 @@ impl InflightSet {
         Ok(InflightGuard { inner: self, key })
     }
 
+    /// Attempt to acquire an [`InflightGuard`] or wait until it is
+    /// available otherwise by blocking the current thread.
+    pub fn acquire_or_wait(&self, key: &str) -> InflightGuard<'_> {
+        loop {
+            match self.acquire(key) {
+                Ok(guard) => break guard,
+                Err(_) => {
+                    std::hint::spin_loop();
+                    continue;
+                }
+            };
+        }
+    }
+
     /// The number of active keys, yet to be dropped.
     pub fn len(&self) -> usize {
         self.keys.lock().len()
@@ -98,7 +112,13 @@ impl InflightSet {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
+    use std::{
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+        time::{Duration, Instant},
+    };
 
     use crate::{InflightSet, InflightSetError};
 
@@ -148,15 +168,63 @@ mod test {
     #[test]
     fn acquire_same_key_many_threads() {
         let s = Arc::new(InflightSet::new());
+        let mut work = Vec::new();
         for _ in 0..10_000 {
-            std::thread::spawn({
+            work.push(std::thread::spawn({
                 let s_captured = Arc::clone(&s);
                 move || {
                     s_captured
                         .acquire(&format!("my-key"))
                         .expect("concurrent access should never cause a panic under Mutex usage");
                 }
-            });
+            }));
         }
+
+        for w in work {
+            w.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn acquire_or_wait() {
+        let s = Arc::new(InflightSet::new());
+        let key = "my-key";
+
+        let guard = s.acquire(key).unwrap();
+        let called_acquire_or_wait = Arc::new(AtomicBool::new(false));
+
+        let handle = std::thread::spawn({
+            let called_captured = Arc::clone(&called_acquire_or_wait);
+            let s_captured = Arc::clone(&s);
+            move || {
+                s_captured.acquire_or_wait(key);
+                called_captured.store(true, Ordering::SeqCst)
+            }
+        });
+
+        // Sleep the main thread to ensure that the background thread
+        // is always blocked for some short period.
+        std::thread::sleep(Duration::from_millis(100));
+
+        assert!(
+            !called_acquire_or_wait.load(Ordering::SeqCst),
+            "acquire_or_wait returned before guard was dropped"
+        );
+
+        // Unblock the background thread
+        drop(guard);
+
+        let start = Instant::now();
+        loop {
+            if start.elapsed() >= Duration::from_secs(2) {
+                panic!("Background thread was stuck, it should be unblocked from dropped guard");
+            }
+
+            if handle.is_finished() {
+                break;
+            }
+        }
+        handle.join().unwrap();
+        assert!(called_acquire_or_wait.load(Ordering::SeqCst));
     }
 }
